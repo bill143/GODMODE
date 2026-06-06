@@ -1,0 +1,140 @@
+version: 1.1.5
+
+#############################################################################
+# GODMODE — LibreChat Configuration
+# Docs: https://www.librechat.ai/docs/configuration/librechat_yaml
+#############################################################################
+
+cache: true
+
+# ---------------------------------------------------------------------------
+# Interface / Branding
+# ---------------------------------------------------------------------------
+interface:
+  appTitle: "GODMODE"
+  # Show all endpoints in the model dropdown
+  endpointsMenu: true
+  # Allow model parameter editing
+  modelSelect: true
+  parameters: true
+  sidePanel: true
+  presets: true
+
+# ---------------------------------------------------------------------------
+# Conversation Search (powered by Meilisearch)
+# ---------------------------------------------------------------------------
+# Search is enabled via SEARCH=true env var; librechat.yaml confirms it here.
+
+# ---------------------------------------------------------------------------
+# Native Memory (per-user, personalized — first tier)
+# ---------------------------------------------------------------------------
+memory:
+  enabled: true
+  personalize: true
+  type: user
+
+# ---------------------------------------------------------------------------
+# MCP Servers
+# ---------------------------------------------------------------------------
+mcpServers:
+  # Mem0 / OpenMemory — cross-session semantic/episodic memory (second tier)
+  openmemory:
+    url: "http://openmemory-mcp:8765/sse"
+    type: sse
+    timeout: 30000
+    description: "Mem0 OpenMemory — persistent cross-session memory store"
+    initTimeout: 15000
+
+  # Vision Bridge — webcam frame analysis
+  vision-bridge:
+    url: "http://vision-bridge:8000/sse"
+    type: sse
+    timeout: 60000
+    description: "Analyze live webcam frames from the user's camera"
+    initTimeout: 15000
+
+# ---------------------------------------------------------------------------
+# Model Endpoints
+# ---------------------------------------------------------------------------
+endpoints:
+  # -- Anthropic (primary: Claude Opus + Sonnet) ----------------------------
+  anthropic:
+    apiKey: "${ANTHROPIC_API_KEY}"
+    models:
+      default:
+        - claude-opus-4-5
+        - claude-sonnet-4-5
+        - claude-3-5-sonnet-20241022
+        - claude-3-5-haiku-20241022
+        - claude-3-opus-20240229
+        - claude-3-sonnet-20240229
+      fetch: true
+    titleConvo: true
+    titleModel: "claude-3-5-haiku-20241022"
+    summarize: false
+    summaryModel: "claude-3-5-haiku-20241022"
+    forcePrompt: false
+    dropParams:
+      - "user"
+    # Vision: Anthropic models support image inputs natively
+    vision:
+      enabled: true
+
+  # -- OpenAI (fallback / vision) -------------------------------------------
+  openAI:
+    apiKey: "${OPENAI_API_KEY}"
+    models:
+      default:
+        - gpt-4o
+        - gpt-4o-mini
+        - gpt-4-turbo
+        - gpt-4-vision-preview
+      fetch: true
+    titleConvo: true
+    titleModel: "gpt-4o-mini"
+    summarize: false
+    summaryModel: "gpt-4o-mini"
+    forcePrompt: false
+    vision:
+      enabled: true
+
+  # -- Agents (LibreChat Agents for self-teach / tool use) ------------------
+  agents:
+    disableBuilder: false
+    # Agents can use MCP tools (memory, vision-bridge) and web search
+    capabilities:
+      - execute_code
+      - file_search
+      - web_search
+
+# ---------------------------------------------------------------------------
+# File Uploads & Vision Inputs
+# ---------------------------------------------------------------------------
+fileConfig:
+  endpoints:
+    anthropic:
+      fileLimit: 5
+      fileSizeLimit: 20  # MB
+      totalSizeLimit: 50
+      supportedMimeTypes:
+        - "image/.*"
+        - "application/pdf"
+        - "text/.*"
+    openAI:
+      fileLimit: 5
+      fileSizeLimit: 20
+      totalSizeLimit: 50
+      supportedMimeTypes:
+        - "image/.*"
+        - "application/pdf"
+        - "text/.*"
+    agents:
+      fileLimit: 10
+      fileSizeLimit: 50
+      totalSizeLimit: 200
+      supportedMimeTypes:
+        - "image/.*"
+        - "application/pdf"
+        - "text/.*"
+  serverFileSizeLimit: 100
+  avatarSizeLimit: 2

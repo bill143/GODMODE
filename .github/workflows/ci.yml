@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "copilot/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Validate docker-compose configuration
+  # ---------------------------------------------------------------------------
+  docker-compose-validate:
+    name: Validate Docker Compose
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create minimal .env for compose config validation
+        run: |
+          cat > .env <<'EOF'
+          ANTHROPIC_API_KEY=sk-ant-placeholder
+          OPENAI_API_KEY=sk-openai-placeholder
+          MONGO_URI=mongodb://mongodb:27017/LibreChat
+          MEILI_MASTER_KEY=placeholder_meili_key_for_ci_validation_only
+          QDRANT_URL=http://qdrant:6333
+          CREDS_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          CREDS_IV=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          JWT_SECRET=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          JWT_REFRESH_SECRET=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+          MEM0_API_KEY=
+          MEM0_COLLECTION_NAME=godmode_memory
+          VISION_DEFAULT_PROVIDER=anthropic
+          VISION_DEFAULT_MODEL=claude-3-5-sonnet-20241022
+          VISION_MAX_FRAMES=4
+          ALLOW_REGISTRATION=true
+          ALLOW_SOCIAL_LOGIN=false
+          MEMORY_ENABLED=true
+          EOF
+
+      - name: Validate docker compose config
+        run: docker compose config --quiet
+
+  # ---------------------------------------------------------------------------
+  # Lint Python (vision-bridge)
+  # ---------------------------------------------------------------------------
+  lint-python:
+    name: Lint Python (vision-bridge)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install linting tools
+        run: pip install ruff
+
+      - name: Ruff lint
+        run: ruff check services/vision-bridge/
+
+      - name: Ruff format check
+        run: ruff format --check services/vision-bridge/
+
+  # ---------------------------------------------------------------------------
+  # Lint JavaScript / TypeScript (Next.js app)
+  # ---------------------------------------------------------------------------
+  lint-js:
+    name: Lint JS/TS
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+  # ---------------------------------------------------------------------------
+  # Validate librechat.yaml structure
+  # ---------------------------------------------------------------------------
+  validate-librechat-yaml:
+    name: Validate librechat.yaml
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
+      - name: Validate YAML syntax
+        run: python -c "import yaml, sys; yaml.safe_load(open('librechat.yaml')); print('librechat.yaml is valid YAML')"
+
+  # ---------------------------------------------------------------------------
+  # Security: check for hardcoded secrets
+  # ---------------------------------------------------------------------------
+  secret-scan:
+    name: Secret Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for hardcoded API keys
+        run: |
+          # Fail if real-looking API key patterns are present in tracked files
+          if git grep -E 'sk-ant-api[0-9]{2}-[A-Za-z0-9_-]{90,}' -- ':!.env.example' ':!*.md'; then
+            echo "ERROR: Possible hardcoded Anthropic API key found"
+            exit 1
+          fi
+          if git grep -E 'sk-(proj-)?[A-Za-z0-9]{48,}' -- ':!.env.example' ':!*.md'; then
+            echo "ERROR: Possible hardcoded OpenAI API key found"
+            exit 1
+          fi
+          echo "No hardcoded secrets detected"
