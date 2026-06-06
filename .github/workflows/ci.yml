@@ -13,6 +13,8 @@ jobs:
   docker-compose-validate:
     name: Validate Docker Compose
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -47,6 +49,8 @@ jobs:
   lint-python:
     name: Lint Python (vision-bridge)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -69,6 +73,8 @@ jobs:
   lint-js:
     name: Lint JS/TS
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -89,6 +95,8 @@ jobs:
   validate-librechat-yaml:
     name: Validate librechat.yaml
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -108,6 +116,8 @@ jobs:
   secret-scan:
     name: Secret Scan
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 

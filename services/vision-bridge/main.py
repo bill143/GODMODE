@@ -332,9 +332,9 @@ async def _handle_mcp_request(body: dict) -> dict:
             analysis = await analyze_frames(frames, prompt=prompt)
         except HTTPException as exc:
             return _mcp_error(req_id, -32603, str(exc.detail))
-        except Exception as exc:  # noqa: BLE001
+        except Exception:  # noqa: BLE001
             log.exception("Tool execution error")
-            return _mcp_error(req_id, -32603, str(exc))
+            return _mcp_error(req_id, -32603, "Internal error during tool execution")
 
         return _mcp_response(
             req_id,
