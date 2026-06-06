@@ -1,6 +1,6 @@
 ###############################################################################
 # GODMODE — Production Docker Compose Stack
-# Built on LibreChat v0.7.8 (pin via LIBRECHAT_VERSION in .env)
+# Built on LibreChat v0.8.6 (pin via LIBRECHAT_VERSION in .env)
 ###############################################################################
 
 services:
@@ -8,7 +8,7 @@ services:
   # LibreChat — primary chat API + client (port 3080)
   # ---------------------------------------------------------------------------
   librechat:
-    image: ghcr.io/danny-avila/librechat:v0.7.8
+    image: ghcr.io/danny-avila/librechat:${LIBRECHAT_VERSION:-v0.8.6}
     container_name: godmode-librechat
     restart: unless-stopped
     ports:
@@ -19,7 +19,11 @@ services:
       meilisearch:
         condition: service_healthy
       rag_api:
-        condition: service_started
+        condition: service_healthy
+      openmemory-mcp:
+        condition: service_healthy
+      vision-bridge:
+        condition: service_healthy
     environment:
       HOST: "0.0.0.0"
       PORT: "3080"
@@ -50,7 +54,7 @@ services:
     networks:
       - godmode_net
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3080/api/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3080/health"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -92,7 +96,7 @@ services:
     networks:
       - godmode_net
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:7700/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:7700/health"]
       interval: 20s
       timeout: 10s
       retries: 5
@@ -110,7 +114,7 @@ services:
     networks:
       - godmode_net
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:6333/healthz"]
+      test: ["CMD", "bash", "-lc", "exec 3<>/dev/tcp/127.0.0.1/6333"]
       interval: 20s
       timeout: 10s
       retries: 5
@@ -127,8 +131,8 @@ services:
       qdrant:
         condition: service_healthy
     environment:
-      VECTOR_DB_TYPE: "qdrant"
-      QDRANT_URL: "http://qdrant:6333"
+      VECTOR_DB_TYPE: "atlas-mongo"
+      ATLAS_MONGO_DB_URI: "mongodb://mongodb:27017/LibreChat"
       RAG_PORT: "${RAG_PORT:-8000}"
       EMBEDDINGS_PROVIDER: "${EMBEDDINGS_PROVIDER:-openai}"
       EMBEDDINGS_MODEL: "${EMBEDDINGS_MODEL:-text-embedding-3-small}"
@@ -138,16 +142,30 @@ services:
       - .env
     networks:
       - godmode_net
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 45s
 
   # ---------------------------------------------------------------------------
   # Mem0 / OpenMemory MCP Server — cross-session semantic memory via Qdrant
   # ---------------------------------------------------------------------------
   openmemory-mcp:
-    image: mem0ai/openmemory-mcp:latest
+    image: mem0/openmemory-mcp:latest
     container_name: godmode-openmemory
     restart: unless-stopped
     depends_on:
       qdrant:
+        condition: service_healthy
+      mongodb:
         condition: service_healthy
     environment:
       OPENAI_API_KEY: "${OPENAI_API_KEY}"
@@ -163,7 +181,13 @@ services:
     networks:
       - godmode_net
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8765/health"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/openapi.json', timeout=5)",
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -191,7 +215,13 @@ services:
     networks:
       - godmode_net
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8000/health"]
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)",
+        ]
       interval: 20s
       timeout: 10s
       retries: 5

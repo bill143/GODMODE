@@ -361,7 +361,7 @@ async def _sse_generator(connection_id: str) -> AsyncGenerator[bytes, None]:
 
     # First event: tell client where to POST messages
     endpoint_url = f"/messages?connection_id={connection_id}"
-    yield f"event: endpoint\ndata: {json.dumps(endpoint_url)}\n\n".encode()
+    yield f"event: endpoint\ndata: {endpoint_url}\n\n".encode()
 
     try:
         while True:
