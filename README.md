@@ -1,6 +1,6 @@
 # GODMODE
 
-> Production-grade multimodal AI console powered by **LibreChat v0.7.8**.  
+> Production-grade multimodal AI console powered by **LibreChat v0.8.6**.  
 > Talk · Vision · Camera · Memory · Self-teach — all in one `docker compose up`.
 
 ---
@@ -52,7 +52,28 @@ notepad .env
 
 Fill in **every** required value (see [Environment Variables](#environment-variables) below).
 
-### 4. Generate strong secrets
+### 4. Generate strong secrets + validate `.env`
+
+Use the bootstrap script (recommended):
+
+```powershell
+./scripts/bootstrap-env.ps1
+```
+
+Or on macOS/Linux:
+
+```bash
+./scripts/bootstrap-env.sh
+```
+
+The script generates:
+- `CREDS_KEY`
+- `CREDS_IV`
+- `JWT_SECRET`
+- `JWT_REFRESH_SECRET`
+- `MEILI_MASTER_KEY`
+
+It also validates that every variable declared in `.env.example` exists in `.env`.
 
 Open **PowerShell** and run these commands — copy each output into the corresponding `.env` variable:
 
@@ -95,6 +116,60 @@ Wait until you see: `LibreChat server listening on port 3080`
 ### 7. Open GODMODE
 
 Navigate to **http://localhost:3080** in Chrome or Edge.
+
+---
+
+## Production Deployment Runbook (Single VPS / Generic Docker Host)
+
+> This runbook is host-agnostic and does **not** perform live deployment automatically.
+> The operator must run these commands on the target server.
+
+### 1) Clone on the server (**manual operator action**)
+
+```bash
+git clone https://github.com/bill143/GODMODE.git
+cd GODMODE
+```
+
+### 2) Bootstrap environment file and secrets
+
+```bash
+./scripts/bootstrap-env.sh
+```
+
+### 3) Fill in real API keys and domain values (**manual operator action**)
+
+Edit `.env` and set real values for:
+- `ANTHROPIC_API_KEY`
+- `OPENAI_API_KEY`
+- `GODMODE_DOMAIN` (public DNS name)
+- `TLS_EMAIL` (email used for ACME TLS certificates)
+
+### 4) Start production stack (TLS reverse proxy in front of LibreChat)
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+### 5) Verify healthchecks
+
+```bash
+docker compose ps
+docker compose logs --tail=100 librechat rag_api openmemory-mcp vision-bridge
+```
+
+All services should show healthy, and Caddy should be serving HTTPS.
+
+### 6) Point DNS to the server (**manual operator action**)
+
+Create A/AAAA records for `GODMODE_DOMAIN` to your server IP, then wait for DNS propagation.
+
+### 7) Final verification (**manual operator action**)
+
+Open `https://<GODMODE_DOMAIN>` and verify:
+- LibreChat loads
+- model endpoints are available
+- memory and camera tools operate normally
 
 ---
 
@@ -200,19 +275,19 @@ For standalone camera testing, see [docs/camera-integration.md](docs/camera-inte
                     │                                         │
 Browser ──── :3080 ─┤── librechat ────┬─── mongodb           │
                     │                 ├─── meilisearch        │
-                    │                 ├─── rag_api ─── qdrant │
-                    │                 ├─── openmemory-mcp     │
+                    │                 ├─── rag_api            │
+                    │                 ├─── openmemory-mcp ─ qdrant │
                     │                 └─── vision-bridge      │
                     └─────────────────────────────────────────┘
 ```
 
 | Service | Image | Purpose |
 |---|---|---|
-| `librechat` | `ghcr.io/danny-avila/librechat:v0.7.8` | Chat UI + API |
+| `librechat` | `ghcr.io/danny-avila/librechat:v0.8.6` | Chat UI + API |
 | `mongodb` | `mongo:7-jammy` | Conversation history |
 | `meilisearch` | `getmeili/meilisearch:v1.12.3` | Full-text search |
 | `qdrant` | `qdrant/qdrant:v1.11.0` | Vector store |
-| `rag_api` | `ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest` | Document RAG |
+| `rag_api` | `ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest` | Document RAG API service |
 | `openmemory-mcp` | `mem0ai/openmemory-mcp:latest` | Semantic memory MCP |
 | `vision-bridge` | *(built from `./services/vision-bridge`)* | Webcam relay MCP |
 

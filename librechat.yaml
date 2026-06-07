@@ -36,10 +36,15 @@ memory:
 # ---------------------------------------------------------------------------
 # MCP Servers
 # ---------------------------------------------------------------------------
+mcpSettings:
+  allowedAddresses:
+    - openmemory-mcp:8765
+    - vision-bridge:8000
+
 mcpServers:
   # Mem0 / OpenMemory — cross-session semantic/episodic memory (second tier)
   openmemory:
-    url: "http://openmemory-mcp:8765/sse"
+    url: "http://openmemory-mcp:8765/mcp/librechat/sse/default"
     type: sse
     timeout: 30000
     description: "Mem0 OpenMemory — persistent cross-session memory store"
@@ -61,14 +66,13 @@ endpoints:
   anthropic:
     apiKey: "${ANTHROPIC_API_KEY}"
     models:
-      default:
-        - claude-opus-4-5
-        - claude-sonnet-4-5
-        - claude-3-5-sonnet-20241022
-        - claude-3-5-haiku-20241022
-        - claude-3-opus-20240229
-        - claude-3-sonnet-20240229
-      fetch: true
+      - claude-opus-4-5
+      - claude-sonnet-4-5
+      - claude-3-5-sonnet-20241022
+      - claude-3-5-haiku-20241022
+      - claude-3-opus-20240229
+      - claude-3-sonnet-20240229
+    fetch: true
     titleConvo: true
     titleModel: "claude-3-5-haiku-20241022"
     summarize: false
@@ -84,12 +88,11 @@ endpoints:
   openAI:
     apiKey: "${OPENAI_API_KEY}"
     models:
-      default:
-        - gpt-4o
-        - gpt-4o-mini
-        - gpt-4-turbo
-        - gpt-4-vision-preview
-      fetch: true
+      - gpt-4o
+      - gpt-4o-mini
+      - gpt-4-turbo
+      - gpt-4-vision-preview
+    fetch: true
     titleConvo: true
     titleModel: "gpt-4o-mini"
     summarize: false
