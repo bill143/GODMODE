@@ -240,7 +240,10 @@ service, and **exits non-zero** on failure. Add `--core` to check only the
 services that need no API keys, or `--down` to tear down afterwards.
 
 The whole stack reaches a healthy state with **placeholder** keys, so this is
-deterministic and runs in CI (the `smoke-test` job) without real secrets.
+deterministic and runs in CI. The **`smoke-test`** job uses
+[`hoverkraft-tech/compose-action`](https://github.com/hoverkraft-tech/compose-action)
+to build + boot the stack and wait on healthchecks, then runs `verify-stack.sh`
+for the assertions — all without real secrets.
 
 > **What Level 2 does *not* prove:** it never calls Anthropic/OpenAI, so it does
 > not confirm a model actually answers. That is **Level 3** below — manual, with
