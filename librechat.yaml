@@ -36,6 +36,14 @@ memory:
 # ---------------------------------------------------------------------------
 # MCP Servers
 # ---------------------------------------------------------------------------
+# Security posture (per official LibreChat MCP guidance):
+#   * `allowedAddresses` is an SSRF EXEMPTION list for INTERNAL services only.
+#     It permits LibreChat to reach these private Docker hostnames (host:port);
+#     it is NOT a general allow/whitelist. Only list internal MCP services here.
+#   * `allowedDomains` is intentionally LEFT UNSET. Setting it switches MCP into
+#     strict-whitelist mode and would block every public destination not listed.
+#   * Both MCP servers below set `chatMenu: false` so their tools are available
+#     to Agents but are NOT exposed as a direct chat-menu toggle to every user.
 mcpSettings:
   allowedAddresses:
     - openmemory-mcp:8765
@@ -49,6 +57,8 @@ mcpServers:
     timeout: 30000
     description: "Mem0 OpenMemory — persistent cross-session memory store"
     initTimeout: 15000
+    # Agent-only: do not surface as a direct chat-menu tool toggle.
+    chatMenu: false
 
   # Vision Bridge — webcam frame analysis
   vision-bridge:
@@ -57,6 +67,8 @@ mcpServers:
     timeout: 60000
     description: "Analyze live webcam frames from the user's camera"
     initTimeout: 15000
+    # Agent-only: invoked by the Agent's analyze_frame tool, not a chat toggle.
+    chatMenu: false
 
 # ---------------------------------------------------------------------------
 # Model Endpoints

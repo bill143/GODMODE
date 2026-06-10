@@ -1,14 +1,46 @@
+# GODMODE - Caddy reverse proxy (TLS termination in front of LibreChat)
+#
+# Single-host / single-VPS pattern. Caddy is the only public entrypoint and
+# terminates HTTPS, then proxies to LibreChat over the internal Docker network.
+#
+# Trusted proxies: Caddy is the EDGE here, so by default it ignores any
+# client-supplied X-Forwarded-For and sets it to the real client IP. LibreChat
+# is told to trust exactly one hop via TRUST_PROXY=1 (see docker-compose.prod.yml),
+# so per-IP rate limiting and ban tracking see the real client.
+# If you place GODMODE behind an ADDITIONAL proxy/CDN (e.g. Cloudflare), declare
+# that upstream so client IPs are derived correctly, for example:
+#
+#   {
+#     servers {
+#       trusted_proxies static <cdn_ip_ranges...>
+#     }
+#   }
+
 {$GODMODE_DOMAIN} {
-  encode zstd gzip
+	encode zstd gzip
 
-  reverse_proxy librechat:3080
+	# --- Security response headers ------------------------------------------
+	header {
+		# Force HTTPS for a year (only emitted over HTTPS).
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		# Block MIME-type sniffing.
+		X-Content-Type-Options "nosniff"
+		# Disallow this app from being framed by other origins (clickjacking).
+		X-Frame-Options "DENY"
+		# Limit referrer leakage to other origins.
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Disable the legacy/buggy XSS auditor (modern guidance is "0").
+		X-XSS-Protection "0"
+		# Allow only the camera/mic the webcam feature needs (same origin);
+		# deny other powerful features by default.
+		Permissions-Policy "camera=(self), microphone=(self), geolocation=(), browsing-topics=()"
+		# Don't advertise server/software details.
+		-Server
+		-X-Powered-By
+	}
 
-  tls {$TLS_EMAIL}
+	reverse_proxy librechat:3080
 
-  header {
-    Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
-    X-Content-Type-Options "nosniff"
-    X-Frame-Options "DENY"
-    Referrer-Policy "strict-origin-when-cross-origin"
-  }
+	# Automatic HTTPS: ACME for a real domain, internal CA for localhost.
+	tls {$TLS_EMAIL}
 }

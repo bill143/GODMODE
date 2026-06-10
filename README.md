@@ -381,13 +381,29 @@ docker compose ps qdrant
 
 ## Security Hardening (Production)
 
-For internet-facing deployments:
+GODMODE separates **local-dev** defaults from **production-safe** defaults, so
+the production overlay is safer by default than the base stack:
 
-1. Set `ALLOW_REGISTRATION=false` after creating your account
-2. Place a reverse proxy (Nginx/Caddy) in front of port 3080 with TLS
-3. Do NOT expose ports 6333 (Qdrant), 27017 (MongoDB), 7700 (Meilisearch) externally
-4. Rotate all secrets in `.env` regularly
-5. Enable MongoDB authentication for multi-user deployments
+| | Local base stack | Production overlay (`-f docker-compose.prod.yml`) |
+|---|---|---|
+| Registration | **open** (easy first run) | **closed** by default |
+| Public ports | LibreChat on `127.0.0.1:3080` only | **only Caddy** (`:80`/`:443`), HTTPS |
+| Backends (Mongo/Meili/Qdrant/MCP) | internal | internal (none published) |
+| Cookies/CORS | `http://localhost` | `https://${GODMODE_DOMAIN}` (Secure) |
+| Headers / proxy trust | n/a | HSTS + hardening headers, `TRUST_PROXY=1` |
+
+Operator actions still required before going live (full list +
+copy-paste checklist in **[docs/security.md](docs/security.md)**):
+
+1. Set a real `GODMODE_DOMAIN` + `TLS_EMAIL`; point DNS at the host.
+2. Generate unique secrets (`./scripts/bootstrap-env.sh`); never commit `.env`; rotate periodically.
+3. Keep `ALLOW_REGISTRATION` closed in production (or close it after creating your account).
+4. Keep datastore ports internal (default); optionally enable **MongoDB auth** and a **Qdrant API key**.
+5. Restrict the host firewall to `80`/`443` (+ SSH).
+
+> These defaults make a public deployment **safer**, not "fully secure" — see
+> [docs/security.md](docs/security.md) for the threat model and what remains
+> operator-owned.
 
 ---
 

@@ -12,7 +12,10 @@ services:
     container_name: godmode-librechat
     restart: unless-stopped
     ports:
-      - "3080:3080"
+      # Bind to loopback only so local dev is not exposed on the LAN.
+      # Production publishes nothing here (see docker-compose.prod.yml) and
+      # serves through Caddy instead.
+      - "127.0.0.1:3080:3080"
     depends_on:
       mongodb:
         condition: service_healthy
