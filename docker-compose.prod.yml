@@ -1,8 +1,28 @@
 services:
   librechat:
-    ports: []
+    # Not published on the host - only Caddy (below) is public. LibreChat is
+    # reachable solely over the internal Docker network.
+    # `!reset []` CLEARS the host port the base file binds (compose otherwise
+    # CONCATENATES port lists, so a plain `[]` would not remove it). Requires
+    # Docker Compose v2.24+. The base file binds 127.0.0.1 only, so even without
+    # this, LibreChat is never exposed beyond loopback.
+    ports: !reset []
     expose:
       - "3080"
+    environment:
+      # Production-safe registration default: CLOSED unless the operator opts
+      # in via ALLOW_REGISTRATION=true in .env. (The base stack defaults to
+      # OPEN for an easy local first run; this overlay flips that for prod.)
+      ALLOW_REGISTRATION: "${ALLOW_REGISTRATION:-false}"
+      # Public HTTPS URLs LibreChat uses for CORS + Secure auth cookies + links.
+      # Derived from the domain you set in .env; must be the real https origin.
+      DOMAIN_CLIENT: "https://${GODMODE_DOMAIN}"
+      DOMAIN_SERVER: "https://${GODMODE_DOMAIN}"
+      # Trust exactly one reverse-proxy hop (Caddy) so per-IP rate limiting and
+      # ban tracking use the real client IP. Increase only if behind more proxies.
+      TRUST_PROXY: "${TRUST_PROXY:-1}"
+      # Keep the app out of search indexes.
+      NO_INDEX: "true"
     restart: unless-stopped
     mem_limit: 2g
     cpus: 1.50
