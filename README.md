@@ -213,7 +213,46 @@ Open `.env` and set these values before starting:
 
 ---
 
+## Runtime Verification
+
+Verification comes in **three honest levels** — don't confuse one for another:
+
+| Level | Proves | Needs real keys? |
+|---|---|---|
+| 1. Static validation | config/YAML/lint are well-formed | No (CI always) |
+| 2. **Local stack verification** | the stack **builds, boots, and is healthy**; local health endpoints respond | No |
+| 3. End-to-end product | real model replies (Talk/Vision/Camera/Memory) work | **Yes** |
+
+**Level 2 — one command** (builds, starts, and checks the whole stack):
+
+```bash
+./scripts/verify-stack.sh --up --build      # Linux/macOS
+```
+```powershell
+./scripts/verify-stack.ps1 -Up -Build       # Windows
+```
+
+It validates `docker compose config`, waits for every service
+(`mongodb`, `meilisearch`, `qdrant`, `rag_api`, `openmemory-mcp`,
+`vision-bridge`, `librechat`) to report **healthy**, probes each service's local
+health endpoint, prints a **PASS/FAIL** summary, dumps logs for any failed
+service, and **exits non-zero** on failure. Add `--core` to check only the
+services that need no API keys, or `--down` to tear down afterwards.
+
+The whole stack reaches a healthy state with **placeholder** keys, so this is
+deterministic and runs in CI (the `smoke-test` job) without real secrets.
+
+> **What Level 2 does *not* prove:** it never calls Anthropic/OpenAI, so it does
+> not confirm a model actually answers. That is **Level 3** below — manual, with
+> real keys. Full details: **[docs/verification.md](docs/verification.md)**.
+
+---
+
 ## Verifying Each Feature
+
+> This section is **Level 3** — it requires **real** API keys and proves the
+> product actually works end-to-end. Run [Level 2](#runtime-verification) first
+> to confirm the stack is healthy.
 
 ### ✅ Talk
 
