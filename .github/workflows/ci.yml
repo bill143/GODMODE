@@ -44,6 +44,70 @@ jobs:
         run: docker compose config --quiet
 
   # ---------------------------------------------------------------------------
+  # Runtime smoke test: build + boot the stack and verify it reaches a healthy
+  # state. Lifecycle pattern inspired by hoverkraft-tech/compose-action
+  # (up -> wait-for-health -> smoke -> logs-on-failure -> teardown).
+  #
+  # Uses PLACEHOLDER secrets only — it never calls Anthropic/OpenAI, so it
+  # cannot depend on external provider responses, keys, or rate limits. It
+  # proves the stack boots and local health endpoints answer; it does NOT prove
+  # real model responses (that needs real keys; see docs/verification.md).
+  # ---------------------------------------------------------------------------
+  smoke-test:
+    name: Runtime Smoke Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create placeholder .env (no real secrets)
+        run: |
+          cat > .env <<'EOF'
+          NODE_ENV=production
+          LIBRECHAT_VERSION=v0.8.6
+          PUBLIC_URL=http://localhost:3080
+          GODMODE_DOMAIN=localhost
+          TLS_EMAIL=admin@example.com
+          CREDS_KEY=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          CREDS_IV=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          JWT_SECRET=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+          JWT_REFRESH_SECRET=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+          ANTHROPIC_API_KEY=sk-ant-placeholder-not-real
+          OPENAI_API_KEY=sk-placeholder-not-real
+          MONGO_URI=mongodb://mongodb:27017/LibreChat
+          MEILI_MASTER_KEY=placeholder_meili_master_key_for_ci_only_0000000000000000
+          SEARCH=true
+          QDRANT_URL=http://qdrant:6333
+          QDRANT_API_KEY=
+          RAG_PORT=8000
+          EMBEDDINGS_PROVIDER=openai
+          EMBEDDINGS_MODEL=text-embedding-3-small
+          MEM0_API_KEY=
+          MEM0_COLLECTION_NAME=godmode_memory
+          VISION_DEFAULT_PROVIDER=anthropic
+          VISION_DEFAULT_MODEL=claude-3-5-sonnet-20241022
+          VISION_MAX_FRAMES=4
+          ALLOW_REGISTRATION=true
+          ALLOW_SOCIAL_LOGIN=false
+          MEMORY_ENABLED=true
+          EOF
+
+      - name: Build + start stack and verify it reaches healthy
+        run: bash scripts/verify-stack.sh --up --build --timeout 300
+
+      - name: Dump compose logs on failure
+        if: failure()
+        run: |
+          docker compose ps || true
+          docker compose logs --no-color --tail=300 || true
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose down -v --remove-orphans
+
+  # ---------------------------------------------------------------------------
   # Lint Python (vision-bridge)
   # ---------------------------------------------------------------------------
   lint-python:
