@@ -45,13 +45,14 @@ jobs:
 
   # ---------------------------------------------------------------------------
   # Runtime smoke test: build + boot the stack and verify it reaches a healthy
-  # state. Lifecycle pattern inspired by hoverkraft-tech/compose-action
-  # (up -> wait-for-health -> smoke -> logs-on-failure -> teardown).
+  # state. Lifecycle is managed by hoverkraft-tech/compose-action (up + wait +
+  # automatic teardown); assertions reuse scripts/verify-stack.sh; failures emit
+  # grouped per-service logs.
   #
   # Uses PLACEHOLDER secrets only — it never calls Anthropic/OpenAI, so it
   # cannot depend on external provider responses, keys, or rate limits. It
-  # proves the stack boots and local health endpoints answer; it does NOT prove
-  # real model responses (that needs real keys; see docs/verification.md).
+  # proves the local service graph boots and health endpoints answer; it does
+  # NOT prove real model responses (that needs real keys; see docs/verification.md).
   # ---------------------------------------------------------------------------
   smoke-test:
     name: Runtime Smoke Test
@@ -94,18 +95,41 @@ jobs:
           MEMORY_ENABLED=true
           EOF
 
-      - name: Build + start stack and verify it reaches healthy
-        run: bash scripts/verify-stack.sh --up --build --timeout 300
+      # Compose-native lifecycle via hoverkraft-tech/compose-action: it runs
+      # `docker compose up --detach` (building the local vision-bridge image)
+      # and `--wait` BLOCKS until every service's healthcheck passes, so
+      # readiness is driven by the repo's existing healthchecks. The action's
+      # post hook automatically runs `docker compose down`, even on failure.
+      - name: Build + start stack, wait for healthchecks
+        uses: hoverkraft-tech/compose-action@v3.0.0
+        with:
+          compose-file: docker-compose.yml
+          up-flags: "--build --wait --wait-timeout 300"
+          down-flags: "--volumes --remove-orphans"
 
-      - name: Dump compose logs on failure
+      # Reuse the operator verification script for the actual smoke assertions:
+      # per-service health status + internal HTTP/TCP endpoint probes (librechat,
+      # mongodb, meilisearch, qdrant, rag_api, openmemory-mcp, vision-bridge),
+      # with a readable PASS/FAIL summary. Runs against the already-running stack
+      # (no --up) and exits non-zero on any failure.
+      - name: Smoke-verify health + endpoints
+        run: bash scripts/verify-stack.sh --timeout 120
+
+      # Actionable diagnostics: name each service's health state and emit its
+      # logs as a collapsible group so reviewers see exactly what failed.
+      - name: Diagnostics on failure
         if: failure()
         run: |
+          echo "::group::docker compose ps"
           docker compose ps || true
-          docker compose logs --no-color --tail=300 || true
-
-      - name: Tear down stack
-        if: always()
-        run: docker compose down -v --remove-orphans
+          echo "::endgroup::"
+          for s in librechat mongodb meilisearch qdrant rag_api openmemory-mcp vision-bridge; do
+            cid="$(docker compose ps -q "$s" 2>/dev/null)"
+            state="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$cid" 2>/dev/null || echo absent)"
+            echo "::group::$s [${state:-absent}] - last 200 log lines"
+            docker compose logs --no-color --tail=200 "$s" 2>/dev/null || echo "(no container)"
+            echo "::endgroup::"
+          done
 
   # ---------------------------------------------------------------------------
   # Lint Python (vision-bridge)

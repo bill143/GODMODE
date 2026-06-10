@@ -84,13 +84,20 @@ after), `--timeout N` (seconds to wait for healthy, default 240).
 ## CI smoke verification
 
 `.github/workflows/ci.yml` includes a **`smoke-test`** job that goes beyond
-static validation (pattern inspired by `hoverkraft-tech/compose-action`):
+static validation. Its Compose lifecycle is managed by
+[`hoverkraft-tech/compose-action`](https://github.com/hoverkraft-tech/compose-action):
 
-1. writes a throwaway `.env` with **placeholder** secrets (no real keys),
-2. builds + brings the stack up with `docker compose up -d --wait`,
-3. runs `scripts/verify-stack.sh` (health + endpoint probes),
-4. on failure, uploads/dumps `docker compose logs`,
-5. always tears the stack down (`docker compose down -v`).
+1. writes a CI-safe `.env` with **placeholder** secrets (no real keys),
+2. `hoverkraft-tech/compose-action` runs `docker compose up --detach --build
+   --wait` — building the local vision-bridge image and **blocking until every
+   service's healthcheck passes** (readiness comes from the repo's existing
+   healthchecks),
+3. runs `scripts/verify-stack.sh` against the running stack for the actual
+   assertions (per-service health + internal endpoint probes + PASS/FAIL),
+4. on failure, emits each service's health state and last 200 log lines as
+   collapsible groups so reviewers can see exactly what broke,
+5. the action's post hook always tears the stack down
+   (`docker compose down --volumes --remove-orphans`).
 
 It validates the **service graph and startup**, not real provider responses, so
 it never depends on external APIs, keys, or rate limits.
