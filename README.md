@@ -13,7 +13,7 @@
 | **Vision** | Upload images directly to Claude/GPT-4o | Paperclip icon in composer |
 | **Camera** | Live webcam frames → AI analysis via Vision Bridge MCP | Ask AI "look through my camera" |
 | **Memory** | LibreChat native per-user memory + Mem0 cross-session semantic memory | Settings → Memory toggle |
-| **Self-teach** | LibreChat Agents with web search MCP, writes facts to Mem0 | New Conversation → Agents endpoint |
+| **Self-teach** | LibreChat Agents with native web search + Mem0 MCP memory tools | New Conversation → Agents endpoint |
 
 ---
 
@@ -193,6 +193,25 @@ Open `.env` and set these values before starting:
 | `ANTHROPIC_API_KEY` | [console.anthropic.com](https://console.anthropic.com/settings/keys) |
 | `OPENAI_API_KEY` | [platform.openai.com/api-keys](https://platform.openai.com/api-keys) |
 
+> The **Anthropic** model list is defined inline in `librechat.yaml`. The **OpenAI**
+> model list is set via `OPENAI_MODELS` (the built-in openAI endpoint reads its
+> models from the environment, not from `librechat.yaml`).
+
+### Optional — Branding & Web Search
+
+| Variable | Default | Description |
+|---|---|---|
+| `APP_TITLE` | `GODMODE` | Application title / branding (set via env, not yaml) |
+| `OPENAI_MODELS` | `gpt-4o,gpt-4o-mini,gpt-4-turbo,gpt-4-vision-preview` | OpenAI model list |
+| `SERPER_API_KEY` | *(blank)* | Web search provider — enables the agent `web_search` capability |
+| `FIRECRAWL_API_KEY` | *(blank)* | Web search scraper (Firecrawl) |
+| `FIRECRAWL_API_URL` | *(blank)* | Self-hosted Firecrawl URL (blank = Firecrawl cloud) |
+| `JINA_API_KEY` | *(blank)* | Web search reranker (optional) |
+
+> **Web search** is wired in `librechat.yaml` (the `webSearch` block + the agents
+> `web_search` capability) but stays dormant until you supply at least one search
+> key (`SERPER_API_KEY`) and one scraper key (`FIRECRAWL_API_KEY`).
+
 ### Required — Services
 
 | Variable | Default | Description |
@@ -263,7 +282,8 @@ For standalone camera testing, see [docs/camera-integration.md](docs/camera-inte
 1. Open the model dropdown → select **Agents**
 2. Create a new agent or use the default
 3. Ask: *"Research the latest Claude model pricing and save a summary to memory."*
-4. The agent uses web search MCP tools to research, then writes to Mem0
+4. The agent uses the native `web_search` capability to research, then writes to Mem0 via MCP
+   > Requires web search keys (`SERPER_API_KEY` + `FIRECRAWL_API_KEY`); see the env reference below.
 
 ---
 
