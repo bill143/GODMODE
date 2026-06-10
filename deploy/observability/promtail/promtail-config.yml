@@ -1,0 +1,39 @@
+# GODMODE — Promtail configuration
+#
+# Discovers running containers via the Docker socket and ships the logs of
+# GODMODE containers (those named `godmode-*`) to Loki. Using Docker service
+# discovery keeps the config stable even as containers are recreated.
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: warn
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: godmode-containers
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 15s
+    relabel_configs:
+      # Keep only GODMODE stack containers (app + observability are godmode-*).
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "/(godmode-.*)"
+        action: keep
+      # Expose a clean `container` label (strip the leading slash).
+      - source_labels: ["__meta_docker_container_name"]
+        regex: "/(godmode-.*)"
+        target_label: "container"
+      # Carry the compose service name when present.
+      - source_labels: ["__meta_docker_container_label_com_docker_compose_service"]
+        target_label: "service"
+      # stdout vs stderr.
+      - source_labels: ["__meta_docker_container_log_stream"]
+        target_label: "stream"
+      - target_label: "job"
+        replacement: "godmode"

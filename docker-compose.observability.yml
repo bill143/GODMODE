@@ -1,0 +1,184 @@
+###############################################################################
+# GODMODE — Optional Observability Overlay
+#
+# An OPTIONAL, single-host observability stack (Prometheus + Grafana + Loki +
+# Promtail, with cAdvisor / node-exporter / blackbox-exporter). It is NEVER
+# part of the default stack — it only runs when you explicitly include this
+# file:
+#
+#   docker compose -f docker-compose.yml \
+#                  -f docker-compose.prod.yml \
+#                  -f docker-compose.observability.yml up -d
+#
+# Design notes:
+#   * Scrapers/probers join the existing `godmode_net` so they can reach app
+#     services by name; everything else talks over an internal `obs_net`.
+#   * Only Grafana (3000) and Prometheus (9090) publish ports, and only on
+#     127.0.0.1. Reach them via SSH tunnel or a reverse proxy — nothing is
+#     exposed to the public interface by default.
+#   * cAdvisor and node-exporter require a Linux Docker host (they mount host
+#     paths). On Docker Desktop their host metrics are partial; the rest of
+#     the stack still works.
+###############################################################################
+
+services:
+  # ---------------------------------------------------------------------------
+  # Prometheus — metrics scraping + alert rule evaluation
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: godmode-prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=${PROM_RETENTION:-15d}
+      - --web.enable-lifecycle
+    volumes:
+      - ./deploy/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - obs_net
+      - godmode_net
+    ports:
+      # localhost only — tunnel in or front with a reverse proxy
+      - "127.0.0.1:9090:9090"
+    mem_limit: 512m
+    cpus: 0.50
+
+  # ---------------------------------------------------------------------------
+  # Grafana — dashboards (Prometheus + Loki datasources pre-provisioned)
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: godmode-grafana
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+      - loki
+    environment:
+      GF_SECURITY_ADMIN_USER: "${GRAFANA_ADMIN_USER:-admin}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-admin}"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+    volumes:
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    networks:
+      - obs_net
+    ports:
+      # localhost only — change GRAFANA_ADMIN_PASSWORD before exposing this
+      - "127.0.0.1:3000:3000"
+    mem_limit: 256m
+    cpus: 0.50
+
+  # ---------------------------------------------------------------------------
+  # Loki — log store (queried by Grafana; no published port)
+  # ---------------------------------------------------------------------------
+  loki:
+    image: grafana/loki:3.3.2
+    container_name: godmode-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./deploy/observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+    networks:
+      - obs_net
+    mem_limit: 512m
+    cpus: 0.50
+
+  # ---------------------------------------------------------------------------
+  # Promtail — tails GODMODE container logs and ships them to Loki
+  # ---------------------------------------------------------------------------
+  promtail:
+    image: grafana/promtail:3.3.2
+    container_name: godmode-promtail
+    restart: unless-stopped
+    depends_on:
+      - loki
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./deploy/observability/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - promtail_positions:/tmp
+    networks:
+      - obs_net
+    mem_limit: 256m
+    cpus: 0.25
+
+  # ---------------------------------------------------------------------------
+  # cAdvisor — per-container CPU / memory / network / disk metrics (Linux host)
+  # ---------------------------------------------------------------------------
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.2
+    container_name: godmode-cadvisor
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - obs_net
+    mem_limit: 256m
+    cpus: 0.50
+
+  # ---------------------------------------------------------------------------
+  # node-exporter — host CPU / memory / disk / load metrics (Linux host)
+  # ---------------------------------------------------------------------------
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: godmode-node-exporter
+    restart: unless-stopped
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    networks:
+      - obs_net
+    mem_limit: 128m
+    cpus: 0.25
+
+  # ---------------------------------------------------------------------------
+  # blackbox-exporter — HTTP/TCP health probing for services with no native
+  # metrics endpoint (LibreChat, Meilisearch, RAG API, Vision Bridge, Mongo)
+  # ---------------------------------------------------------------------------
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    container_name: godmode-blackbox
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/blackbox/blackbox.yml
+    volumes:
+      - ./deploy/observability/prometheus/blackbox.yml:/etc/blackbox/blackbox.yml:ro
+    networks:
+      - obs_net
+      - godmode_net
+    mem_limit: 128m
+    cpus: 0.25
+
+networks:
+  # Re-declares the network defined in docker-compose.yml so scrapers/probers
+  # can resolve app services by name (same compose project = same network).
+  godmode_net:
+    driver: bridge
+  # Internal-only network for observability component traffic.
+  obs_net:
+    driver: bridge
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  loki_data:
+  promtail_positions:

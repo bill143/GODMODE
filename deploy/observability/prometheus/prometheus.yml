@@ -1,0 +1,87 @@
+# GODMODE — Prometheus scrape configuration
+#
+# Only scrapes metrics surfaces that actually exist in this stack:
+#   * Prometheus, cAdvisor, node-exporter, blackbox-exporter — native /metrics
+#   * Qdrant — native Prometheus /metrics (built in, no exporter needed)
+#   * Everything else (LibreChat, Meilisearch, RAG API, Vision Bridge, Mongo)
+#     has no Prometheus endpoint, so it is health-probed via blackbox-exporter.
+#
+# No fabricated/app-specific metrics endpoints are assumed.
+
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+  external_labels:
+    stack: godmode
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  # --- Native metrics endpoints ---------------------------------------------
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["cadvisor:8080"]
+
+  - job_name: node-exporter
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  - job_name: blackbox-exporter
+    static_configs:
+      - targets: ["blackbox-exporter:9115"]
+
+  # Qdrant ships Prometheus metrics natively on its HTTP port.
+  - job_name: qdrant
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["qdrant:6333"]
+
+  # Meilisearch CAN expose native metrics, but only when started with
+  # MEILI_EXPERIMENTAL_ENABLE_METRICS=true. It is OFF by default in this
+  # stack, so the job is left commented to avoid a permanently-down target.
+  # - job_name: meilisearch
+  #   metrics_path: /metrics
+  #   static_configs:
+  #     - targets: ["meilisearch:7700"]
+
+  # --- Black-box HTTP health probes (services without native metrics) -------
+  - job_name: blackbox-http
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - http://librechat:3080/health
+          - http://meilisearch:7700/health
+          - http://rag_api:8000/health
+          - http://vision-bridge:8000/health
+          - http://openmemory-mcp:8765/openapi.json
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # --- Black-box TCP probes (datastores with no HTTP health surface) --------
+  - job_name: blackbox-tcp
+    metrics_path: /probe
+    params:
+      module: [tcp_connect]
+    static_configs:
+      - targets:
+          - mongodb:27017
+          - qdrant:6333
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115

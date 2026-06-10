@@ -293,6 +293,61 @@ Browser ──── :3080 ─┤── librechat ────┬─── mongo
 
 ---
 
+## Observability (optional)
+
+An **optional** monitoring overlay (Prometheus + Grafana + Loki/Promtail, with
+cAdvisor / node-exporter / blackbox-exporter) ships in
+`docker-compose.observability.yml`. It is **never part of the default stack** —
+it only runs when you add the extra `-f`:
+
+```bash
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.prod.yml \
+  -f docker-compose.observability.yml \
+  up -d
+```
+
+- **Grafana** → `http://127.0.0.1:3000` (login from `GRAFANA_ADMIN_USER` /
+  `GRAFANA_ADMIN_PASSWORD`; **change the password first**). A pre-provisioned
+  *GODMODE — Stack Overview* dashboard shows service health, container CPU/mem,
+  host memory and live logs.
+- **Prometheus** → `http://127.0.0.1:9090` (targets, alerts, queries).
+- **Logs** → Grafana → Explore → Loki, e.g. `{job="godmode"}`.
+
+Both UIs bind to localhost only; reach them via SSH tunnel or a reverse proxy.
+cAdvisor/node-exporter need a Linux Docker host for full host metrics.
+
+Full guide: **[docs/observability.md](docs/observability.md)**.
+
+---
+
+## Backup & Restore
+
+Helper scripts back up the critical datastores (non-destructively):
+
+```bash
+./scripts/backup.sh                 # Linux/macOS -> ./backups/<timestamp>/
+```
+```powershell
+./scripts/backup.ps1                # Windows
+```
+
+Covers **MongoDB** (`mongodump`), **Qdrant** (official snapshot API),
+**Meilisearch** (data volume) and **LibreChat uploads**. Restore is dry-run by
+default and only applies with an explicit confirm flag:
+
+```bash
+./scripts/restore.sh ./backups/<timestamp>              # preview
+./scripts/restore.sh ./backups/<timestamp> --confirm    # apply (destructive)
+```
+
+`.env` secrets and Caddy certs are **not** in these backups — keep them
+yourself. Full runbook (scheduling, manual commands, cold restore, what's
+operator-owned): **[docs/backup-restore.md](docs/backup-restore.md)**.
+
+---
+
 ## Useful Commands
 
 ```powershell

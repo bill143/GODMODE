@@ -1,0 +1,7 @@
+# Shell scripts must use LF endings so they run on Linux Docker hosts,
+# regardless of the contributor's OS or core.autocrlf setting.
+*.sh text eol=lf
+
+# YAML/JSON config consumed by Linux containers — keep LF.
+*.yml text eol=lf
+*.yaml text eol=lf
